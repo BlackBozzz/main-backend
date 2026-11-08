@@ -1,0 +1,14 @@
+[
+  {
+    "code": "READER",
+    "name": "Читатель",
+    "description": "Просматривает все справочники без права изменения",
+    "grants": { "tables": { "*": ["read"] } }
+  },
+  {
+    "code": "EDITOR",
+    "name": "Редактор",
+    "description": "Просматривает и изменяет все справочники, публикует витрину",
+    "grants": { "tables": { "*": ["read", "write"] }, "actions": ["showcase.publish"] }
+  }
+]
