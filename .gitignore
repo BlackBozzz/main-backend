@@ -33,3 +33,6 @@ build/
 .vscode/
 
 /config/argent-jwt.pem
+
+### Файлы вложений ###
+/data/

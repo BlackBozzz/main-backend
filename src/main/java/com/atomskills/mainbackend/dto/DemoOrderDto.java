@@ -10,7 +10,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 
 /**
- * DTO демо-заказа. Номер, статус и дата создания только для чтения:
+ * DTO демо-заказа. Номер, статус, дата создания и версия только для чтения:
  * их выставляет DemoOrderController (номер — NumberGenerator, статус — через проверку перехода).
  */
 public record DemoOrderDto(
@@ -35,7 +35,10 @@ public record DemoOrderDto(
         BigDecimal total,
 
         @DictionaryField(label = "Создан", order = 50, readOnly = true)
-        Instant createdAt
+        Instant createdAt,
+
+        @DictionaryField(label = "Версия", order = 60, readOnly = true)
+        Long version
 
 ) {
 }

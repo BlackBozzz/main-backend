@@ -51,6 +51,10 @@ public class DemoOrder {
     @Column(nullable = false)
     private Instant createdAt;
 
+    /** Версия для оптимистической блокировки: смена статуса сверяет её с версией клиента. */
+    @Version
+    private Long version;
+
     /** Дата создания проставляется при первой записи, если её не задал код. */
     @PrePersist
     void fillCreatedAt() {

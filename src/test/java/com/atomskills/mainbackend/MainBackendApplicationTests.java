@@ -25,12 +25,16 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.hasItems;
 import static org.hamcrest.Matchers.matchesPattern;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -41,7 +45,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /**
  * Проверяет, что контекст приложения поднимается на PostgreSQL из Testcontainers,
  * стартовые роли и демо-данные статусов загружены, и проходит демо-сценарий:
- * заказ с номером и статусами, аудит, импорт XLSX.
+ * заказ с номером и статусами, аудит, импорт XLSX, права на заказы, версия заказа и вложения.
  *
  * Тесты работают в режиме входа без пароля (как профиль demo).
  */
@@ -64,6 +68,10 @@ class MainBackendApplicationTests {
     @TempDir
     static Path keyDir;
 
+    /** Корень вложений, чтобы тест не писал в ./data/attachments. */
+    @TempDir
+    static Path attachmentsDir;
+
     @DynamicPropertySource
     static void properties(DynamicPropertyRegistry registry) {
         registry.add("spring.datasource.url", () -> {
@@ -76,6 +84,7 @@ class MainBackendApplicationTests {
         registry.add("spring.flyway.default-schema", () -> SCHEMA);
         registry.add("spring.jpa.properties.hibernate.default_schema", () -> SCHEMA);
         registry.add("argent.auth.jwt.key-file", () -> keyDir.resolve("argent-jwt.pem").toString());
+        registry.add("argent.attachments.root", () -> attachmentsDir.toString());
         // Вход без пароля, как в профиле demo: пользователи теста входят по логину
         registry.add("argent.auth.password-required", () -> "false");
     }
@@ -119,7 +128,6 @@ class MainBackendApplicationTests {
                 .isEqualTo("ORD-%1$s-%2$05d");
     }
 
-    /** Единственный тест, создающий заказы: номер первого заказа в месяце — 00001. */
     @Test
     void orderFlowWithStatusesAndAudit() throws Exception {
         String admin = login("admin");
@@ -138,7 +146,7 @@ class MainBackendApplicationTests {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"customer\": \"ООО Ромашка\", \"total\": 1500.50}"))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.number").value(matchesPattern("ORD-\\d{4}-\\d{2}-00001")))
+                .andExpect(jsonPath("$.number").value(matchesPattern("ORD-\\d{4}-\\d{2}-\\d{5}")))
                 .andExpect(jsonPath("$.status").value("NEW"))
                 .andReturn().getResponse().getContentAsString();
         Number id = JsonPath.read(created, "$.id");
@@ -189,6 +197,91 @@ class MainBackendApplicationTests {
 
         assertThat(jdbc.queryForList("SELECT code FROM dict_country ORDER BY code", String.class))
                 .containsExactly("KAZ", "RUS");
+    }
+
+    @Test
+    void readerCannotCreateOrder() throws Exception {
+        String reader = userWithRoles("it-reader", "READER");
+
+        mvc.perform(post("/api/demo/orders").header(HttpHeaders.AUTHORIZATION, reader)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"customer\": \"ООО Читатель\", \"total\": 10}"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void managerReadsOrderAudit() throws Exception {
+        String manager = userWithRoles("it-audit-manager", "MANAGER");
+
+        mvc.perform(get("/api/audit").header(HttpHeaders.AUTHORIZATION, manager)
+                        .param("entityType", "dict_demo_order"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void staleVersionGets409() throws Exception {
+        String admin = login("admin");
+        String created = mvc.perform(post("/api/demo/orders").header(HttpHeaders.AUTHORIZATION, admin)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"customer\": \"ООО Версия\", \"total\": 100}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.version").value(0))
+                .andReturn().getResponse().getContentAsString();
+        Number id = JsonPath.read(created, "$.id");
+
+        mvc.perform(post("/api/demo/orders/{id}/status", id).header(HttpHeaders.AUTHORIZATION, admin)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"status\": \"REVIEW\", \"version\": 0}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.version").value(1));
+
+        // Клиент прислал версию, которую уже обогнало чужое изменение
+        mvc.perform(post("/api/demo/orders/{id}/status", id).header(HttpHeaders.AUTHORIZATION, admin)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"status\": \"DONE\", \"version\": 0}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.detail").value("Заказ изменён другим пользователем, обновите данные"));
+
+        assertThat(jdbc.queryForObject("SELECT status FROM dict_demo_order WHERE id = ?", String.class,
+                id.longValue())).isEqualTo("REVIEW");
+    }
+
+    @Test
+    void deleteOrderRemovesAttachments() throws Exception {
+        String editor = userWithRoles("it-attach-editor", "EDITOR");
+        String created = mvc.perform(post("/api/demo/orders").header(HttpHeaders.AUTHORIZATION, editor)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"customer\": \"ООО Вложение\", \"total\": 5}"))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        String id = JsonPath.read(created, "$.id").toString();
+        MockMultipartFile file = new MockMultipartFile("file", "note.txt", "text/plain",
+                "Счёт к заказу".getBytes(StandardCharsets.UTF_8));
+
+        mvc.perform(multipart("/api/attachments").file(file)
+                        .param("entityType", "dict_demo_order").param("entityId", id)
+                        .header(HttpHeaders.AUTHORIZATION, editor))
+                .andExpect(status().isCreated());
+        assertThat(storedFiles()).hasSize(1);
+
+        mvc.perform(delete("/api/demo/orders/{id}", id).header(HttpHeaders.AUTHORIZATION, editor))
+                .andExpect(status().isNoContent());
+
+        mvc.perform(get("/api/attachments").header(HttpHeaders.AUTHORIZATION, editor)
+                        .param("entityType", "dict_demo_order").param("entityId", id))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(0));
+        assertThat(storedFiles()).isEmpty();
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM dict_demo_order WHERE id = ?", Integer.class,
+                Long.parseLong(id))).isZero();
+    }
+
+    /** Файлы в хранилище вложений теста. */
+    private static List<Path> storedFiles() throws IOException {
+        if (!Files.exists(attachmentsDir)) {
+            return List.of();
+        }
+        try (Stream<Path> files = Files.walk(attachmentsDir)) {
+            return files.filter(Files::isRegularFile).toList();
+        }
     }
 
     /** Создаёт пользователя с ролями через REST администрирования и возвращает заголовок Bearer. */

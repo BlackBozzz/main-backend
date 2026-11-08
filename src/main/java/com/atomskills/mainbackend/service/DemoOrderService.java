@@ -1,5 +1,6 @@
 package com.atomskills.mainbackend.service;
 
+import com.argent.servicecommon.attachment.AttachmentService;
 import com.argent.servicecommon.sequence.NumberGenerator;
 import com.argent.servicecommon.status.StatusTransitionService;
 import com.atomskills.mainbackend.dto.DemoOrderDto;
@@ -11,6 +12,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.util.Objects;
 
 /**
  * Демо-сценарий заказа: номер из счётчика ORDER, статус по переходам типа ORDER_STATUS.
@@ -27,10 +29,13 @@ public class DemoOrderService {
     public static final String SEQUENCE = "ORDER";
     /** Статус нового заказа. */
     public static final String INITIAL_STATUS = "NEW";
+    /** Таблица заказов: владелец вложений и тип записи в журнале аудита. */
+    public static final String ENTITY_TYPE = "dict_demo_order";
 
     private final DemoOrderRepository orders;
     private final NumberGenerator numberGenerator;
     private final StatusTransitionService statusTransitions;
+    private final AttachmentService attachments;
 
     /** Создаёт заказ со следующим номером и статусом NEW. */
     @Transactional
@@ -46,24 +51,44 @@ public class DemoOrderService {
     }
 
     /**
-     * Переводит заказ в статус target.
+     * Переводит заказ в статус target. Если передана expectedVersion, она должна совпасть
+     * с текущей версией заказа.
      *
      * @throws EntityNotFoundException заказ, тип или статус не найден (404)
-     * @throws IllegalStateException   переход не предусмотрен (409)
+     * @throws IllegalStateException   переход не предусмотрен или заказ изменён другим пользователем (409)
      * @throws com.argent.servicecommon.security.exception.GrantsAccessDeniedException
      *                                 нет действия, которого требует переход (403)
      */
     @Transactional
-    public DemoOrderDto changeStatus(Long id, String target) {
-        DemoOrder order = orders.findById(id)
-                .orElseThrow(() -> new EntityNotFoundException("Заказ не найден: " + id));
+    public DemoOrderDto changeStatus(Long id, String target, Long expectedVersion) {
+        DemoOrder order = find(id);
+        // Заказ загружен в этой транзакции, поэтому @Version сам не увидит устаревшие данные клиента
+        if (expectedVersion != null && !Objects.equals(expectedVersion, order.getVersion())) {
+            throw new IllegalStateException("Заказ изменён другим пользователем, обновите данные");
+        }
         statusTransitions.assertAllowed(STATUS_TYPE, order.getStatus(), target);
         order.setStatus(target);
         return toDto(orders.saveAndFlush(order));
     }
 
+    /**
+     * Удаляет заказ вместе с его вложениями; файлы вложений удаляются после коммита.
+     *
+     * @throws EntityNotFoundException заказ не найден (404)
+     */
+    @Transactional
+    public void delete(Long id) {
+        orders.delete(find(id));
+        attachments.deleteAll(ENTITY_TYPE, id.toString());
+    }
+
+    private DemoOrder find(Long id) {
+        return orders.findById(id)
+                .orElseThrow(() -> new EntityNotFoundException("Заказ не найден: " + id));
+    }
+
     private static DemoOrderDto toDto(DemoOrder order) {
         return new DemoOrderDto(order.getId(), order.getNumber(), order.getCustomer(),
-                order.getStatus(), order.getTotal(), order.getCreatedAt());
+                order.getStatus(), order.getTotal(), order.getCreatedAt(), order.getVersion());
     }
 }

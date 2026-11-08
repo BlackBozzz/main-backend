@@ -16,10 +16,11 @@ import java.math.BigDecimal;
 /**
  * Демо-заказы: номер из счётчика, статусная машина и аудит.
  *
- * Оба метода требуют {@code write} на таблицу {@code dict_demo_order}. Переход
+ * Все методы требуют {@code write} на таблицу {@code dict_demo_order}. Переход
  * REVIEW → DONE дополнительно требует действие {@code orders.approve} (проверяет
  * StatusTransitionService, отказ — 403). Журнал изменений заказа отдаёт библиотека:
- * {@code GET /api/audit?entityType=dict_demo_order&entityId=<id>}.
+ * {@code GET /api/audit?entityType=dict_demo_order&entityId=<id>}. Удаление заказа
+ * удаляет и его вложения ({@code /api/attachments}).
  */
 @RestController
 @RequestMapping("/api/demo/orders")
@@ -37,10 +38,11 @@ public class DemoOrderController {
             BigDecimal total) {
     }
 
-    /** Тело смены статуса. */
+    /** Тело смены статуса; version — версия заказа, которую видел клиент (необязательна). */
     public record ChangeStatusRequest(
             @NotBlank(message = "Укажите статус.")
-            String status) {
+            String status,
+            Long version) {
     }
 
     /** Создаёт заказ: номер из счётчика ORDER, статус NEW. */
@@ -55,6 +57,14 @@ public class DemoOrderController {
     @PostMapping("/{id}/status")
     @PreAuthorize("@argentAccess.table('dict_demo_order', 'write')")
     public DemoOrderDto changeStatus(@PathVariable Long id, @Valid @RequestBody ChangeStatusRequest request) {
-        return orderService.changeStatus(id, request.status());
+        return orderService.changeStatus(id, request.status(), request.version());
+    }
+
+    /** Удаляет заказ и его вложения. */
+    @DeleteMapping("/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @PreAuthorize("@argentAccess.table('dict_demo_order', 'write')")
+    public void delete(@PathVariable Long id) {
+        orderService.delete(id);
     }
 }
