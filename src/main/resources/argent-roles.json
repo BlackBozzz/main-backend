@@ -8,7 +8,19 @@
   {
     "code": "EDITOR",
     "name": "Редактор",
-    "description": "Просматривает и изменяет все справочники, публикует витрину",
-    "grants": { "tables": { "*": ["read", "write"] }, "actions": ["showcase.publish"] }
+    "description": "Просматривает и изменяет все справочники, публикует витрину, импортирует данные, согласует заказы",
+    "grants": {
+      "tables": { "*": ["read", "write"] },
+      "actions": ["showcase.publish", "import", "orders.approve"]
+    }
+  },
+  {
+    "code": "MANAGER",
+    "name": "Менеджер",
+    "description": "Просматривает справочники, ведёт и согласует демо-заказы",
+    "grants": {
+      "tables": { "*": ["read"], "dict_demo_order": ["read", "write"] },
+      "actions": ["orders.approve"]
+    }
   }
 ]
