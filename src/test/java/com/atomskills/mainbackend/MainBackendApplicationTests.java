@@ -284,6 +284,37 @@ class MainBackendApplicationTests {
         }
     }
 
+    @Test
+    void countryUpdateThroughDictionaryApiIsAudited() throws Exception {
+        String admin = login("admin");
+        String created = mvc.perform(post("/api/argent-dictionary/dict_country/records")
+                        .header(HttpHeaders.AUTHORIZATION, admin).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\": \"Аудитляндия\", \"code\": \"AUD\"}"))
+                .andExpect(status().is2xxSuccessful())
+                .andReturn().getResponse().getContentAsString();
+        Number id = JsonPath.read(created, "$.id");
+
+        mvc.perform(put("/api/argent-dictionary/dict_country/records/{id}", id)
+                        .header(HttpHeaders.AUTHORIZATION, admin).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\": \"Аудитляндия-2\", \"code\": \"AUD\"}"))
+                .andExpect(status().isOk());
+
+        mvc.perform(get("/api/audit").header(HttpHeaders.AUTHORIZATION, admin)
+                        .param("entityType", "dict_country").param("entityId", id.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[?(@.action == 'UPDATE')].newValue").value(hasItems("Аудитляндия-2")));
+    }
+
+    @Test
+    void creatingOrderWithoutNumberThroughDictionaryApiGets409() throws Exception {
+        String admin = login("admin");
+        mvc.perform(post("/api/argent-dictionary/dict_demo_order/records")
+                        .header(HttpHeaders.AUTHORIZATION, admin).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"customer\": \"Без номера\", \"total\": 10}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.detail").value("Запись нарушает ограничение целостности базы данных."));
+    }
+
     /** Создаёт пользователя с ролями через REST администрирования и возвращает заголовок Bearer. */
     private String userWithRoles(String login, String... roles) throws Exception {
         String admin = login("admin");

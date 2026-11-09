@@ -1,5 +1,6 @@
 package com.atomskills.mainbackend.entity;
 
+import com.argent.servicecommon.audit.Audited;
 import com.argent.servicecommon.dictionary.annotation.ArgentDictionary;
 import com.atomskills.mainbackend.dto.CountryDto;
 import jakarta.persistence.*;
@@ -14,6 +15,7 @@ import java.util.UUID;
  *
  * Таблица будет создаваться библиотекой service-common.
  */
+@Audited
 @Entity
 @Table(name = "dict_country")
 @ArgentDictionary(

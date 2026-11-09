@@ -49,6 +49,8 @@ curl "$B/api/audit?entityType=dict_demo_order&entityId=1" -H "$H"    # созд�
 
 - Статусы `NEW → REVIEW → DONE`; `DONE` требует действие `orders.approve` (иначе 403), лишний переход — 409.
 - `DELETE /api/demo/orders/{id}` удаляет заказ вместе с вложениями.
+- Заказы создаются только через `POST /api/demo/orders` (номер выдаёт счётчик). Форма «Демо-заказы» в админке — для просмотра и правки существующих; создание из неё без номера даёт 409 «Запись нарушает ограничение целостности базы данных.».
+- Правки справочников в админке попадают в «Журнал» (все сущности помечены `@Audited`).
 - Экспорт: `GET /api/export/dictionaries/dict_country?format=xlsx` (`csv`, `docx`). Импорт:
   `POST /api/import/dictionaries/dict_country` с `-F file=@countries.xlsx -F mode=REPLACE` (действие `import`).
 - Кириллицу в теле curl в консоли Windows передавайте файлом в UTF-8 (`--data-binary @order.json`).

@@ -1,5 +1,6 @@
 package com.atomskills.mainbackend.entity;
 
+import com.argent.servicecommon.audit.Audited;
 import com.argent.servicecommon.dictionary.annotation.ArgentDictionary;
 import com.atomskills.mainbackend.dto.DemoShowcaseDto;
 import jakarta.persistence.*;
@@ -17,6 +18,7 @@ import java.util.UUID;
  * Демонстрационный справочник с максимальным набором полей.
  * Связанные справочники не каскадируются при сохранении.
  */
+@Audited
 @Entity
 @Table(name = "dict_demo_showcase")
 @ArgentDictionary(name = "Демонстрация всех типов полей", dtoClass = DemoShowcaseDto.class)

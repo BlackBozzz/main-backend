@@ -1,5 +1,6 @@
 package com.atomskills.mainbackend.entity;
 
+import com.argent.servicecommon.audit.Audited;
 import com.argent.servicecommon.dictionary.annotation.ArgentDictionary;
 import com.atomskills.mainbackend.dto.DemoTagDto;
 import jakarta.persistence.*;
@@ -8,6 +9,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 /** Тестовый справочник «Теги демонстрации». */
+@Audited
 @Entity
 @Table(name = "dict_demo_tag")
 @ArgentDictionary(name = "Теги демонстрации", dtoClass = DemoTagDto.class)
