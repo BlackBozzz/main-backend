@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<jasperReport name="orders-period" pageWidth="595" pageHeight="842" columnWidth="515" leftMargin="40" rightMargin="40" topMargin="50" bottomMargin="50">
+    <parameter name="from" class="java.util.Date"/>
+    <parameter name="to" class="java.util.Date"/>
+    <query language="sql"><![CDATA[SELECT number, customer, status, total, created_at FROM dict_demo_order WHERE created_at >= $P{from} AND created_at < $P{to} ORDER BY created_at]]></query>
+    <field name="number" class="java.lang.String"/>
+    <field name="customer" class="java.lang.String"/>
+    <field name="status" class="java.lang.String"/>
+    <field name="total" class="java.math.BigDecimal"/>
+    <field name="created_at" class="java.sql.Timestamp"/>
+    <variable name="sum" class="java.math.BigDecimal" calculation="Sum">
+        <expression><![CDATA[$F{total}]]></expression>
+    </variable>
+    <title height="30">
+        <element kind="staticText" x="0" y="0" width="515" height="25" fontName="DejaVu Sans" fontSize="14.0" bold="true">
+            <text><![CDATA[Заказы за период]]></text>
+        </element>
+    </title>
+    <columnHeader height="20">
+        <element kind="staticText" x="0" y="0" width="120" height="20" fontName="DejaVu Sans" bold="true">
+            <text><![CDATA[Номер]]></text>
+        </element>
+        <element kind="staticText" x="120" y="0" width="170" height="20" fontName="DejaVu Sans" bold="true">
+            <text><![CDATA[Заказчик]]></text>
+        </element>
+        <element kind="staticText" x="290" y="0" width="70" height="20" fontName="DejaVu Sans" bold="true">
+            <text><![CDATA[Статус]]></text>
+        </element>
+        <element kind="staticText" x="360" y="0" width="80" height="20" fontName="DejaVu Sans" bold="true">
+            <text><![CDATA[Сумма]]></text>
+        </element>
+        <element kind="staticText" x="440" y="0" width="75" height="20" fontName="DejaVu Sans" bold="true">
+            <text><![CDATA[Создан]]></text>
+        </element>
+    </columnHeader>
+    <detail>
+        <band height="20">
+            <element kind="textField" x="0" y="0" width="120" height="20" fontName="DejaVu Sans">
+                <expression><![CDATA[$F{number}]]></expression>
+            </element>
+            <element kind="textField" x="120" y="0" width="170" height="20" fontName="DejaVu Sans">
+                <expression><![CDATA[$F{customer}]]></expression>
+            </element>
+            <element kind="textField" x="290" y="0" width="70" height="20" fontName="DejaVu Sans">
+                <expression><![CDATA[$F{status}]]></expression>
+            </element>
+            <element kind="textField" x="360" y="0" width="80" height="20" fontName="DejaVu Sans" pattern="#,##0.00" blankWhenNull="true">
+                <expression><![CDATA[$F{total}]]></expression>
+            </element>
+            <element kind="textField" x="440" y="0" width="75" height="20" fontName="DejaVu Sans" pattern="dd.MM.yyyy">
+                <expression><![CDATA[$F{created_at}]]></expression>
+            </element>
+        </band>
+    </detail>
+    <summary height="20">
+        <element kind="staticText" x="0" y="0" width="120" height="20" fontName="DejaVu Sans" bold="true">
+            <text><![CDATA[Итого]]></text>
+        </element>
+        <element kind="textField" x="120" y="0" width="240" height="20" fontName="DejaVu Sans">
+            <expression><![CDATA["Заказов: " + $V{REPORT_COUNT}]]></expression>
+        </element>
+        <element kind="textField" x="360" y="0" width="155" height="20" fontName="DejaVu Sans" pattern="#,##0.00" blankWhenNull="true">
+            <expression><![CDATA[$V{sum}]]></expression>
+        </element>
+    </summary>
+</jasperReport>

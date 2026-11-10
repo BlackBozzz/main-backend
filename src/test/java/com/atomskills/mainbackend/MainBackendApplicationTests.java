@@ -23,6 +23,7 @@ import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -30,8 +31,11 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.stream.Stream;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.hasItems;
 import static org.hamcrest.Matchers.matchesPattern;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
@@ -39,13 +43,15 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
  * Проверяет, что контекст приложения поднимается на PostgreSQL из Testcontainers,
  * стартовые роли и демо-данные статусов загружены, и проходит демо-сценарий:
- * заказ с номером и статусами, аудит, импорт XLSX, права на заказы, версия заказа и вложения.
+ * заказ с номером и статусами, аудит, импорт XLSX, права на заказы, версия заказа, вложения
+ * и печать отчётов JasperReports.
  *
  * Тесты работают в режиме входа без пароля (как профиль demo).
  */
@@ -272,6 +278,93 @@ class MainBackendApplicationTests {
         assertThat(storedFiles()).isEmpty();
         assertThat(jdbc.queryForObject("SELECT count(*) FROM dict_demo_order WHERE id = ?", Integer.class,
                 Long.parseLong(id))).isZero();
+    }
+
+    @Test
+    void ordersPeriodReportIsRendered() throws Exception {
+        String admin = login("admin");
+        createOrder(admin, "ООО Отчёт за период");
+
+        byte[] pdf = mvc.perform(get("/api/demo/orders/report").header(HttpHeaders.AUTHORIZATION, admin)
+                        .param("from", "2020-01-01").param("to", "2099-12-31"))
+                .andExpect(status().isOk())
+                .andExpect(header().string(HttpHeaders.CONTENT_TYPE, "application/pdf"))
+                .andExpect(header().string(HttpHeaders.CONTENT_DISPOSITION, containsString("attachment")))
+                .andReturn().getResponse().getContentAsByteArray();
+        assertThat(new String(pdf, 0, 5, StandardCharsets.US_ASCII)).isEqualTo("%PDF-");
+    }
+
+    @Test
+    void orderCardIsRenderedAsXlsxAndDocx() throws Exception {
+        String admin = login("admin");
+        String created = createOrder(admin, "ООО Карточка");
+        Number id = JsonPath.read(created, "$.id");
+        String number = JsonPath.read(created, "$.number");
+        // Смена статуса даёт строку UPDATE в истории заказа
+        mvc.perform(post("/api/demo/orders/{id}/status", id).header(HttpHeaders.AUTHORIZATION, admin)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"status\": \"REVIEW\"}"))
+                .andExpect(status().isOk());
+
+        byte[] xlsx = mvc.perform(get("/api/demo/orders/{id}/card", id).header(HttpHeaders.AUTHORIZATION, admin)
+                        .param("format", "xlsx"))
+                .andExpect(status().isOk())
+                .andExpect(header().string(HttpHeaders.CONTENT_TYPE,
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                .andReturn().getResponse().getContentAsByteArray();
+        assertThat(zipEntryText(xlsx, "xl/sharedStrings.xml")).contains(number).contains("REVIEW");
+
+        byte[] docx = mvc.perform(get("/api/demo/orders/{id}/card", id).header(HttpHeaders.AUTHORIZATION, admin)
+                        .param("format", "docx"))
+                .andExpect(status().isOk())
+                .andExpect(header().string(HttpHeaders.CONTENT_TYPE,
+                        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"))
+                .andExpect(header().string(HttpHeaders.CONTENT_DISPOSITION, containsString("attachment")))
+                .andReturn().getResponse().getContentAsByteArray();
+        assertThat(zipEntryText(docx, "word/document.xml")).contains(number);
+    }
+
+    @Test
+    void unknownReportFormatIs400() throws Exception {
+        mvc.perform(get("/api/demo/orders/report").header(HttpHeaders.AUTHORIZATION, login("admin"))
+                        .param("from", "2020-01-01").param("to", "2021-01-01").param("format", "html"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void orderCardWithoutReadIs403() throws Exception {
+        String admin = login("admin");
+        Number id = JsonPath.read(createOrder(admin, "ООО Без доступа"), "$.id");
+        // Роль читает только страны: read на dict_demo_order нет
+        mvc.perform(put("/api/roles/COUNTRY_READER").header(HttpHeaders.AUTHORIZATION, admin)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"name": "Читатель стран", "grants": {"tables": {"dict_country": ["read"]}}}"""))
+                .andExpect(status().isOk());
+        String countryReader = userWithRoles("it-country-reader", "COUNTRY_READER");
+
+        mvc.perform(get("/api/demo/orders/{id}/card", id).header(HttpHeaders.AUTHORIZATION, countryReader))
+                .andExpect(status().isForbidden());
+    }
+
+    /** Создаёт заказ через REST и возвращает тело ответа. */
+    private String createOrder(String authorization, String customer) throws Exception {
+        return mvc.perform(post("/api/demo/orders").header(HttpHeaders.AUTHORIZATION, authorization)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"customer\": \"" + customer + "\", \"total\": 250.75}"))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+    }
+
+    /** Текст записи ZIP-архива (XLSX/DOCX) в UTF-8. */
+    private static String zipEntryText(byte[] zip, String entryName) throws IOException {
+        try (ZipInputStream in = new ZipInputStream(new ByteArrayInputStream(zip))) {
+            for (ZipEntry entry = in.getNextEntry(); entry != null; entry = in.getNextEntry()) {
+                if (entry.getName().equals(entryName)) {
+                    return new String(in.readAllBytes(), StandardCharsets.UTF_8);
+                }
+            }
+        }
+        throw new AssertionError("В архиве нет записи " + entryName);
     }
 
     /** Файлы в хранилище вложений теста. */
