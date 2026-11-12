@@ -58,3 +58,7 @@ curl "$B/api/audit?entityType=dict_demo_order&entityId=1" -H "$H"    # созд�
 ## Тесты
 
 `./mvnw test` — Testcontainers (нужен Docker): роли, заказ (номер, переходы, 409, права), вложения, аудит, импорт.
+
+## Новые демонстрационные REST-сценарии
+
+Добавлены `/api/demo/mail`, `/api/demo/queues`, `/api/demo/querydsl/orders`, `/api/demo/reports/*`. QueryDSL APT для `QDemoOrder` настроен в `pom.xml`. Полная инструкция — [`README_SHOWCASE_RU.md`](../README_SHOWCASE_RU.md).

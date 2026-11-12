@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<jasperReport name="demo-sales" pageWidth="595" pageHeight="842" columnWidth="515" leftMargin="40" rightMargin="40" topMargin="40" bottomMargin="40">
+    <field name="product" class="java.lang.String"/>
+    <field name="department" class="java.lang.String"/>
+    <field name="quantity" class="java.lang.Integer"/>
+    <field name="price" class="java.math.BigDecimal"/>
+    <field name="amount" class="java.math.BigDecimal"/>
+    <variable name="totalAmount" class="java.math.BigDecimal" calculation="Sum"><expression><![CDATA[$F{amount}]]></expression></variable>
+    <title height="55">
+        <element kind="staticText" x="0" y="0" width="515" height="30" fontName="DejaVu Sans" fontSize="18" bold="true"><text><![CDATA[Демо — продажи]]></text></element>
+        <element kind="staticText" x="0" y="32" width="515" height="18" fontName="DejaVu Sans" fontSize="10"><text><![CDATA[Фиктивные данные из Java, без обращения к БД]]></text></element>
+    </title>
+    <columnHeader height="24">
+        <element kind="staticText" x="0" y="2" width="145" height="20" fontName="DejaVu Sans" bold="true"><text><![CDATA[Товар]]></text></element>
+        <element kind="staticText" x="150" y="2" width="145" height="20" fontName="DejaVu Sans" bold="true"><text><![CDATA[Категория]]></text></element>
+        <element kind="staticText" x="300" y="2" width="45" height="20" fontName="DejaVu Sans" bold="true"><text><![CDATA[Кол-во]]></text></element>
+        <element kind="staticText" x="345" y="2" width="85" height="20" fontName="DejaVu Sans" bold="true"><text><![CDATA[Цена]]></text></element>
+        <element kind="staticText" x="435" y="2" width="80" height="20" fontName="DejaVu Sans" bold="true"><text><![CDATA[Сумма]]></text></element>
+    </columnHeader>
+    <detail><band height="22">
+        <element kind="textField" x="0" y="0" width="145" height="20" fontName="DejaVu Sans"><expression><![CDATA[$F{product}]]></expression></element>
+        <element kind="textField" x="150" y="0" width="145" height="20" fontName="DejaVu Sans"><expression><![CDATA[$F{department}]]></expression></element>
+        <element kind="textField" x="300" y="0" width="45" height="20" fontName="DejaVu Sans" hTextAlign="Right"><expression><![CDATA[$F{quantity}]]></expression></element>
+        <element kind="textField" x="345" y="0" width="85" height="20" fontName="DejaVu Sans" pattern="#,##0.00" hTextAlign="Right"><expression><![CDATA[$F{price}]]></expression></element>
+        <element kind="textField" x="435" y="0" width="80" height="20" fontName="DejaVu Sans" pattern="#,##0.00" hTextAlign="Right"><expression><![CDATA[$F{amount}]]></expression></element>
+    </band></detail>
+    <summary height="30">
+        <element kind="staticText" x="0" y="5" width="300" height="22" fontName="DejaVu Sans" bold="true"><text><![CDATA[Всего]]></text></element>
+        <element kind="textField" x="375" y="5" width="140" height="22" fontName="DejaVu Sans" bold="true" pattern="#,##0.00" hTextAlign="Right"><expression><![CDATA[$V{totalAmount}]]></expression></element>
+    </summary>
+</jasperReport>
