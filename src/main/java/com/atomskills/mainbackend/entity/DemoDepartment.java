@@ -12,7 +12,8 @@ import lombok.Setter;
 @Audited
 @Entity
 @Table(name = "dict_demo_department")
-@ArgentDictionary(name = "Подразделения демонстрации", dtoClass = DemoDepartmentDto.class)
+@ArgentDictionary(name = "Подразделения демонстрации", dtoClass = DemoDepartmentDto.class,
+        group = "План производства")
 @Getter
 @Setter
 @NoArgsConstructor

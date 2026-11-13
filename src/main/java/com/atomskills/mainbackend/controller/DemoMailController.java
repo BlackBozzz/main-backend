@@ -3,6 +3,10 @@ package com.atomskills.mainbackend.controller;
 import com.argent.servicecommon.mail.ArgentMailMessage;
 import com.argent.servicecommon.mail.ArgentQueuedMailResult;
 import com.argent.servicecommon.mail.ArgentQueuedMailService;
+import com.argent.servicecommon.docs.openapi.ArgentApiAction;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
@@ -25,6 +29,8 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/api/demo/mail")
 @PreAuthorize("@argentAccess.action('admin')")
+@ArgentApiAction("admin")
+@Tag(name = "Почта: демонстрация", description = "Отправка писем по email, пользователям и ролям через очередь")
 public class DemoMailController {
     private final ObjectProvider<ArgentQueuedMailService> queuedMail;
 
@@ -32,18 +38,30 @@ public class DemoMailController {
         this.queuedMail = queuedMail;
     }
 
-    public record MailAvailability(boolean enabled) { }
+    @Schema(title = "Доступность почтового сервиса")
+    public record MailAvailability(@Schema(title = "Почта включена") boolean enabled) { }
+    @Schema(title = "Запрос почтовой рассылки")
     public record MailRequest(
+            @Schema(title = "Режим адресатов", description = "email, emails, userId, userIds, role, roles, all")
             @NotBlank String target,
+            @Schema(title = "Адресат или код роли")
             @NotBlank String recipient,
+            @Schema(title = "Тема")
             @NotBlank @Size(max = 255) String subject,
+            @Schema(title = "Текст письма")
             @NotBlank String body) { }
 
+    @Operation(summary = "Проверить включение почты", description = "Показывает, доступна ли конфигурация ArgentQueuedMailService.")
     @GetMapping("/status")
     public MailAvailability status() {
         return new MailAvailability(queuedMail.getIfAvailable() != null);
     }
 
+    @Operation(summary = "Поставить письма в очередь", description = """
+            Создаёт задачи ArgentQueue для каждого адресата. Рассылка асинхронная.
+            Получатели определяются по адресу, ID пользователей, коду роли или всем активным пользователям.
+            Для реальной отправки нужен SMTP и включённый ArgentMail.
+            """)
     @PostMapping
     @ResponseStatus(HttpStatus.ACCEPTED)
     public ArgentQueuedMailResult enqueue(@Valid @RequestBody MailRequest request) {
